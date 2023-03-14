@@ -4,7 +4,7 @@ extern crate iprange;
 use clio::*;
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use iprange::IpRange;
-use std::io::BufRead;
+use std::{io::BufRead, net::IpAddr};
 
 use clap::Parser;
 
@@ -34,7 +34,7 @@ fn simplify_input(mut input: Input) -> (IpBothRange, Errors) {
     };
     let mut errors = Errors::new();
     for line in input.lock().lines() {
-        for net in line.unwrap().split_whitespace() {
+        for net in line.unwrap().split_whitespace().to_owned() {
             match net.parse() {
                 Ok(ipnet) => match ipnet {
                     IpNet::V4(v4_net) => {
@@ -46,12 +46,27 @@ fn simplify_input(mut input: Input) -> (IpBothRange, Errors) {
                         ()
                     }
                 },
-                Err(error) => {
-                    eprintln!("ERROR: {} - {}, ignoring.", net, error.to_string());
-                    errors.push(IpParseError {
-                        ip: net.to_string(),
-                        problem: error.to_string(),
-                    });
+                Err(_) => {
+                    // First try to add it as a bare IP
+                    match net.parse() {
+                        Ok(ip) => match ip {
+                            IpAddr::V4(v4_ip) => {
+                                res.v4.add(Ipv4Net::new(v4_ip, 32).unwrap());
+                                ()
+                            }
+                            IpAddr::V6(v6_ip) => {
+                                res.v6.add(Ipv6Net::new(v6_ip, 128).unwrap());
+                                ()
+                            }
+                        },
+                        Err(error) => {
+                            eprintln!("ERROR: {} - {}, ignoring.", net, error.to_string());
+                            errors.push(IpParseError {
+                                ip: net.to_string(),
+                                problem: error.to_string(),
+                            });
+                        }
+                    }
                 }
             }
         }
