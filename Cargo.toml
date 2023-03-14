@@ -1,0 +1,15 @@
+[package]
+name = "rs-aggregate"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap = { version = "4.1.8", features = ["derive"] }
+clio = { version = "0.2.7", features = ["clap-parse"] }
+ipnet = "2.7.1"
+iprange = "0.6.7"
+
+[[bin]]
+name = "rs-aggregate"
