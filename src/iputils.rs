@@ -38,6 +38,17 @@ impl IpBothRange {
     }
 }
 
+impl Display for IpBothRange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for ip in self {
+            ip.fmt(f)?;
+            writeln!(f)?;
+        }
+
+        Ok(())
+    }
+}
+
 pub struct IpBothRangeIter<'a> {
     v4_iter: IpRangeIter<'a, Ipv4Net>,
     v6_iter: IpRangeIter<'a, Ipv6Net>,

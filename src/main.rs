@@ -117,9 +117,7 @@ impl App {
 
         self.simplify_inputs();
 
-        for net in &self.prefixes {
-            println!("{}", net);
-        }
+        print!("{}", self.prefixes);
     }
 }
 
