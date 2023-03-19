@@ -1,7 +1,7 @@
 use std::{
     error::Error,
     fmt::Display,
-    net::{IpAddr, Ipv4Addr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
     str::FromStr,
 };
 
@@ -19,20 +19,22 @@ impl IpBothRange {
         IpBothRange::default()
     }
     pub fn add(&mut self, net: IpOrNet) {
-        match net {
-            IpOrNet::IpNet(net) => match net {
-                IpNet::V4(v4_net) => drop(self.v4.add(v4_net)),
-                IpNet::V6(v6_net) => drop(self.v6.add(v6_net)),
-            },
-            IpOrNet::IpAddr(addr) => match addr {
-                IpAddr::V4(v4_addr) => drop(self.v4.add(v4_addr.into())),
-                IpAddr::V6(v6_addr) => drop(self.v6.add(v6_addr.into())),
-            },
+        match net.net {
+            IpNet::V4(v4_net) => drop(self.v4.add(v4_net)),
+            IpNet::V6(v6_net) => drop(self.v6.add(v6_net)),
         }
     }
     pub fn simplify(&mut self) {
         self.v4.simplify();
         self.v6.simplify();
+    }
+
+    pub fn v4_iter(&self) -> IpRangeIter<Ipv4Net> {
+        self.v4.iter()
+    }
+
+    pub fn v6_iter(&self) -> IpRangeIter<Ipv6Net> {
+        self.v6.iter()
     }
 }
 
@@ -76,9 +78,9 @@ impl<'a> IntoIterator for &'a IpBothRange {
     }
 }
 
-pub enum IpOrNet {
-    IpNet(IpNet),
-    IpAddr(IpAddr),
+#[derive(Debug, PartialEq)]
+pub struct IpOrNet {
+    pub net: IpNet,
 }
 
 #[derive(Debug, Clone)]
@@ -145,13 +147,13 @@ impl IpOrNet {
         }
     }
     pub fn prefix_len(&self) -> u8 {
-        match self {
-            Self::IpNet(net) => net.prefix_len(),
-            Self::IpAddr(addr) => match addr {
-                IpAddr::V4(_) => 32,
-                IpAddr::V6(_) => 128,
-            },
-        }
+        self.net.prefix_len()
+    }
+    pub fn is_ipv4(&self) -> bool {
+        self.net.network().is_ipv4()
+    }
+    pub fn is_ipv6(&self) -> bool {
+        self.net.network().is_ipv6()
     }
 }
 
@@ -166,14 +168,287 @@ impl FromStr for IpOrNet {
     }
 }
 
+impl Display for IpOrNet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.net.fmt(f)
+    }
+}
+
 impl From<IpNet> for IpOrNet {
     fn from(net: IpNet) -> Self {
-        IpOrNet::IpNet(net)
+        IpOrNet { net }
     }
 }
 
 impl From<IpAddr> for IpOrNet {
     fn from(addr: IpAddr) -> Self {
-        IpOrNet::IpAddr(addr)
+        IpOrNet { net: addr.into() }
+    }
+}
+
+impl From<Ipv4Net> for IpOrNet {
+    fn from(net: Ipv4Net) -> Self {
+        IpOrNet { net: net.into() }
+    }
+}
+
+impl From<Ipv6Net> for IpOrNet {
+    fn from(net: Ipv6Net) -> Self {
+        IpOrNet { net: net.into() }
+    }
+}
+
+impl From<Ipv4Addr> for IpOrNet {
+    fn from(addr: Ipv4Addr) -> Self {
+        IpOrNet {
+            net: IpAddr::from(addr).into(),
+        }
+    }
+}
+
+impl From<Ipv6Addr> for IpOrNet {
+    fn from(addr: Ipv6Addr) -> Self {
+        IpOrNet {
+            net: IpAddr::from(addr).into(),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct PrefixlenPair {
+    pub v4: u8,
+    pub v6: u8,
+}
+
+impl Default for PrefixlenPair {
+    fn default() -> Self {
+        PrefixlenPair { v4: 32, v6: 128 }
+    }
+}
+
+impl Display for PrefixlenPair {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(format!("{},{}", self.v4, self.v6).as_str())
+    }
+}
+
+impl PartialEq<IpOrNet> for PrefixlenPair {
+    fn eq(&self, other: &IpOrNet) -> bool {
+        match other.net {
+            IpNet::V4(net) => self.v4 == net.prefix_len(),
+            IpNet::V6(net) => self.v6 == net.prefix_len(),
+        }
+    }
+}
+
+impl PartialEq<PrefixlenPair> for PrefixlenPair {
+    fn eq(&self, other: &PrefixlenPair) -> bool {
+        self.v4 == other.v4 && self.v6 == other.v6
+    }
+}
+
+impl PartialOrd<IpOrNet> for PrefixlenPair {
+    fn ge(&self, other: &IpOrNet) -> bool {
+        match other.net {
+            IpNet::V4(net) => self.v4 >= net.prefix_len(),
+            IpNet::V6(net) => self.v6 >= net.prefix_len(),
+        }
+    }
+    fn gt(&self, other: &IpOrNet) -> bool {
+        match other.net {
+            IpNet::V4(net) => self.v4 > net.prefix_len(),
+            IpNet::V6(net) => self.v6 > net.prefix_len(),
+        }
+    }
+    fn le(&self, other: &IpOrNet) -> bool {
+        match other.net {
+            IpNet::V4(net) => self.v4 <= net.prefix_len(),
+            IpNet::V6(net) => self.v6 <= net.prefix_len(),
+        }
+    }
+    fn lt(&self, other: &IpOrNet) -> bool {
+        match other.net {
+            IpNet::V4(net) => self.v4 < net.prefix_len(),
+            IpNet::V6(net) => self.v6 < net.prefix_len(),
+        }
+    }
+    fn partial_cmp(&self, other: &IpOrNet) -> Option<std::cmp::Ordering> {
+        match other.net {
+            IpNet::V4(net) => self.v4.partial_cmp(&net.prefix_len()),
+            IpNet::V6(net) => self.v6.partial_cmp(&net.prefix_len()),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ParsePrefixlenError {
+    msg: String,
+}
+
+impl Display for ParsePrefixlenError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.msg.as_str())
+    }
+}
+
+impl std::error::Error for ParsePrefixlenError {}
+
+impl FromStr for PrefixlenPair {
+    type Err = ParsePrefixlenError;
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s.split_once(',') {
+            Some(pair) => {
+                let v4 = u8::from_str(pair.0).or(Err(ParsePrefixlenError {
+                    msg: "Unable to parse integer".to_owned(),
+                }))?;
+                let v6 = u8::from_str(pair.1).or(Err(ParsePrefixlenError {
+                    msg: "Unable to parse integer".to_owned(),
+                }))?;
+                if v4 > 32 || v6 > 128 {
+                    return Err(ParsePrefixlenError {
+                        msg: "Invalid prefix length".to_owned(),
+                    });
+                }
+                Ok(PrefixlenPair { v4, v6 })
+            }
+            None => {
+                let len = u8::from_str(s).or(Err(ParsePrefixlenError {
+                    msg: "Unable to parse integer".to_owned(),
+                }))?;
+                if len > 128 {
+                    return Err(ParsePrefixlenError {
+                        msg: "Invalid prefix length".to_owned(),
+                    });
+                }
+                Ok(PrefixlenPair { v4: len, v6: len })
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use core::panic;
+    use std::net::Ipv6Addr;
+    const TEST_V4_ADDR: Ipv4Addr = Ipv4Addr::new(198, 51, 100, 123);
+    const TEST_V6_ADDR: Ipv6Addr = Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0x23ab, 0xf007);
+
+    const TEST_V4_NET: Ipv4Net = match Ipv4Net::new(Ipv4Addr::new(192, 0, 2, 0), 24) {
+        Ok(net) => net,
+        Err(_) => panic!("Couldn't unwrap test vector"),
+    };
+    const TEST_V6_NET: Ipv6Net =
+        match Ipv6Net::new(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0x23ab, 0), 64) {
+            Ok(net) => net,
+            Err(_) => panic!("Couldn't unwrap test vector"),
+        };
+
+    const TEST_V4_ALLNET: Ipv4Net = match Ipv4Net::new(Ipv4Addr::new(0, 0, 0, 0), 0) {
+        Ok(net) => net,
+        Err(_) => panic!("Couldn't unwrap test vector"),
+    };
+
+    const TEST_V6_ALLNET: Ipv6Net = match Ipv6Net::new(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0), 0) {
+        Ok(net) => net,
+        Err(_) => panic!("Couldn't unwrap test vector"),
+    };
+
+    use super::*;
+    #[test]
+    fn parse_bare_v4() {
+        let ip: IpOrNet = "198.51.100.123".parse().unwrap();
+        assert_eq!(ip, TEST_V4_ADDR.into());
+    }
+    #[test]
+    fn parse_bare_v6() {
+        let ip: IpOrNet = "2001:db8::23ab:f007".parse().unwrap();
+        assert_eq!(ip, TEST_V6_ADDR.into());
+    }
+    #[test]
+    fn parse_cidr_v4() {
+        let net: IpOrNet = "192.0.2.0/24".parse().unwrap();
+        assert_eq!(net, TEST_V4_NET.into());
+    }
+    #[test]
+    fn parse_cidr_v4_min() {
+        let net: IpOrNet = "0.0.0.0/0".parse().unwrap();
+        assert_eq!(net, TEST_V4_ALLNET.into());
+    }
+    #[test]
+    fn parse_cidr_v4_max() {
+        let net: IpOrNet = "198.51.100.123/32".parse().unwrap();
+        assert_eq!(net, TEST_V4_ADDR.into());
+    }
+    #[test]
+    fn parse_cidr_v6() {
+        let net: IpOrNet = "2001:db8::23ab:0/64".parse().unwrap();
+        assert_eq!(net, TEST_V6_NET.into());
+    }
+    #[test]
+    fn parse_cidr_v6_min() {
+        let net: IpOrNet = "::/0".parse().unwrap();
+        assert_eq!(net, TEST_V6_ALLNET.into());
+    }
+    #[test]
+    fn parse_netmask_v4() {
+        let net: IpOrNet = "192.0.2.0/255.255.255.0".parse().unwrap();
+        assert_eq!(net, TEST_V4_NET.into());
+    }
+    #[test]
+    fn parse_wildmask_v4() {
+        let net: IpOrNet = "192.0.2.0/0.0.0.255".parse().unwrap();
+        assert_eq!(net, TEST_V4_NET.into());
+    }
+    #[test]
+    #[should_panic]
+    fn reject_v4_mask_v6() {
+        let _net: IpOrNet = "2001:db8::23ab:0/255.255.255.0".parse().unwrap();
+    }
+    #[test]
+    #[should_panic]
+    fn reject_v6_mask_v6() {
+        let _net: IpOrNet = "2001:db8::23ab:0/ffff:ffff:ffff:ffff:ffff:ffff:ffff:0"
+            .parse()
+            .unwrap();
+    }
+    #[test]
+    #[should_panic]
+    fn reject_v4_invalid_pfxlen() {
+        let _net: IpOrNet = "192.0.2.0/33".parse().unwrap();
+    }
+    #[test]
+    #[should_panic]
+    fn reject_v6_invalid_pfxlen() {
+        let _net: IpOrNet = "2001:db8::32ab:0/129".parse().unwrap();
+    }
+    #[test]
+    fn parse_single_prefixlen() {
+        let pfxlen: PrefixlenPair = "20".parse().unwrap();
+        assert_eq!(pfxlen, PrefixlenPair { v4: 20, v6: 20 });
+    }
+    #[test]
+    fn parse_pair_prefixlen() {
+        let pfxlen: PrefixlenPair = "20,32".parse().unwrap();
+        assert_eq!(pfxlen, PrefixlenPair { v4: 20, v6: 32 });
+    }
+    #[test]
+    #[should_panic]
+    fn reject_single_prefixlen_invalid() {
+        let _pfxlen: PrefixlenPair = "129".parse().unwrap();
+    }
+    #[test]
+    #[should_panic]
+    fn reject_pair_prefixlen_invalid_v4() {
+        let _pfxlen: PrefixlenPair = "33,32".parse().unwrap();
+    }
+    #[test]
+    #[should_panic]
+    fn reject_pair_prefixlen_invalid_v6() {
+        let _pfxlen: PrefixlenPair = "32,129".parse().unwrap();
+    }
+    #[test]
+    #[should_panic]
+    fn reject_single_prefixlen_negative() {
+        let _pfxlen: PrefixlenPair = "-32".parse().unwrap();
     }
 }

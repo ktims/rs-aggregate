@@ -2,7 +2,7 @@ extern crate ipnet;
 extern crate iprange;
 
 mod iputils;
-use iputils::{IpBothRange, IpOrNet};
+use iputils::{IpBothRange, IpOrNet, PrefixlenPair};
 
 use clio::*;
 use std::io::BufRead;
@@ -13,27 +13,37 @@ use clap::Parser;
 #[command(author, version, about, long_about=None)]
 struct Args {
     #[clap(value_parser, default_value = "-")]
-    input: Input,
-    #[arg(
+    input: Vec<Input>,
+    #[structopt(
         short,
         long,
-        default_value = "128",
-        help = "Sets the maximum prefix length for entries read. Longer prefixes will be discarded prior to processing."
+        default_value = "32,128",
+        help = "Maximum prefix length for prefixes read. Single value applies to IPv4 and IPv6, comma-separated [IPv4],[IPv6]."
     )]
-    max_prefixlen: u8,
+    max_prefixlen: PrefixlenPair,
     #[arg(short, long, help = "truncate IP/mask to network/mask (else ignore)")]
     truncate: bool,
-    #[arg(id="4", short, help = "Only output IPv4 prefixes", conflicts_with("6"))]
+    #[arg(
+        id = "4",
+        short,
+        help = "Only output IPv4 prefixes",
+        conflicts_with("6")
+    )]
     only_v4: bool,
-    #[arg(id="6", short, help = "Only output IPv6 prefixes", conflicts_with("4"))]
+    #[arg(
+        id = "6",
+        short,
+        help = "Only output IPv6 prefixes",
+        conflicts_with("4")
+    )]
     only_v6: bool,
 }
 
 impl Default for Args {
     fn default() -> Self {
         Args {
-            input: clio::Input::default(),
-            max_prefixlen: 128,
+            input: Vec::from([clio::Input::default()]),
+            max_prefixlen: PrefixlenPair::default(),
             truncate: false,
             only_v4: false,
             only_v6: false,
@@ -48,48 +58,56 @@ struct IpParseError {
     problem: String,
 }
 
-type Errors = Vec<IpParseError>;
+// type Errors = Vec<IpParseError>;
 
 #[derive(Default)]
 struct App {
     args: Args,
     prefixes: IpBothRange,
-    errors: Errors,
+    // errors: Errors,
 }
 
 impl App {
     fn add_prefix(&mut self, pfx: IpOrNet) {
         // Parser accepts host bits set, so detect that case and error if not truncate mode
+        // Note: aggregate6 errors in this case regardless of -4, -6 so do the same
         if !self.args.truncate {
-            match pfx {
-                IpOrNet::IpNet(net) => {
-                    if net.addr() != net.network() {
-                        eprintln!("ERROR: '{}' is not a valid IP network, ignoring.", net);
-                        return;
-                    }
-                }
-                IpOrNet::IpAddr(_) => (),
+            if pfx.net.addr() != pfx.net.network() {
+                eprintln!("ERROR: '{}' is not a valid IP network, ignoring.", pfx);
+                return;
             }
         }
-        if pfx.prefix_len() <= self.args.max_prefixlen {
+        // Don't bother saving if we won't display.
+        if self.args.only_v4 && pfx.is_ipv6() {
+            return;
+        } else if self.args.only_v6 && pfx.is_ipv4() {
+            return;
+        }
+        if self.args.max_prefixlen >= pfx {
             self.prefixes.add(pfx);
         }
     }
-    fn simplify_input(&mut self) {
-        for line in self.args.input.to_owned().lock().lines() {
+    fn consume_input(&mut self, input: &mut Input) {
+        for line in input.lock().lines() {
             for net in line.unwrap().split_whitespace().to_owned() {
                 let pnet = net.parse::<IpOrNet>();
                 match pnet {
                     Ok(pnet) => self.add_prefix(pnet),
-                    Err(e) => {
-                        self.errors.push(IpParseError {
-                            ip: net.to_string(),
-                            problem: e.to_string(),
-                        });
+                    Err(_e) => {
+                        // self.errors.push(IpParseError {
+                        //     ip: net.to_string(),
+                        //     problem: e.to_string(),
+                        // });
                         eprintln!("ERROR: '{}' is not a valid IP network, ignoring.", net);
                     }
                 }
             }
+        }
+    }
+    fn simplify_inputs(&mut self) {
+        let inputs = self.args.input.to_owned();
+        for mut input in inputs {
+            self.consume_input(&mut input);
         }
         self.prefixes.simplify();
     }
@@ -97,7 +115,7 @@ impl App {
     fn main(&mut self) {
         self.args = Args::parse();
 
-        self.simplify_input();
+        self.simplify_inputs();
 
         for net in &self.prefixes {
             println!("{}", net);
