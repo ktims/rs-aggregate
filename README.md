@@ -18,7 +18,7 @@ Takes a list of whitespace-separated IPs or IP networks and aggregates them to t
 Performance comparison of `rs-aggregate` vs `aggregate6`. A speedup of >100x is achieved on DFZ data.
 
 Full DFZ (1154968 total, 202729 aggregates):
-![dfz perf comparison](perfdata/perfcomp_all.png)
+![dfz perf comparison](doc/perfcomp_all.png)
 
 IPv4 DFZ (968520 total, 154061 aggregates):
-![ipv4 dfz perf comparison](perfdata/perfcomp_v4.png)
+![ipv4 dfz perf comparison](doc/perfcomp_v4.png)
