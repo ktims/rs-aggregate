@@ -1,6 +1,8 @@
 extern crate ipnet;
 extern crate iprange;
 
+use std::process::exit;
+
 mod iputils;
 use iputils::{IpBothRange, IpOrNet, PrefixlenPair};
 
@@ -72,7 +74,7 @@ impl App {
         // Parser accepts host bits set, so detect that case and error if not truncate mode
         // Note: aggregate6 errors in this case regardless of -4, -6 so do the same
         if !self.args.truncate {
-            if pfx.net.addr() != pfx.net.network() {
+            if pfx.addr() != pfx.network() {
                 eprintln!("ERROR: '{}' is not a valid IP network, ignoring.", pfx);
                 return;
             }
@@ -89,17 +91,21 @@ impl App {
     }
     fn consume_input(&mut self, input: &mut Input) {
         for line in input.lock().lines() {
-            for net in line.unwrap().split_whitespace().to_owned() {
-                let pnet = net.parse::<IpOrNet>();
-                match pnet {
-                    Ok(pnet) => self.add_prefix(pnet),
-                    Err(_e) => {
-                        // self.errors.push(IpParseError {
-                        //     ip: net.to_string(),
-                        //     problem: e.to_string(),
-                        // });
-                        eprintln!("ERROR: '{}' is not a valid IP network, ignoring.", net);
+            match line {
+                Ok(line) => {
+                    for net in line.split_whitespace() {
+                        let pnet = net.parse::<IpOrNet>();
+                        match pnet {
+                            Ok(pnet) => self.add_prefix(pnet),
+                            Err(_e) => {
+                                eprintln!("ERROR: '{}' is not a valid IP network, ignoring.", net);
+                            }
+                        }
                     }
+                }
+                Err(e) => {
+                    eprintln!("I/O error! {}", e);
+                    exit(1);
                 }
             }
         }

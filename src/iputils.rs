@@ -19,7 +19,7 @@ impl IpBothRange {
         IpBothRange::default()
     }
     pub fn add(&mut self, net: IpOrNet) {
-        match net.net {
+        match net.0 {
             IpNet::V4(v4_net) => drop(self.v4.add(v4_net)),
             IpNet::V6(v6_net) => drop(self.v6.add(v6_net)),
         }
@@ -90,9 +90,7 @@ impl<'a> IntoIterator for &'a IpBothRange {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct IpOrNet {
-    pub net: IpNet,
-}
+pub struct IpOrNet(IpNet);
 
 #[derive(Debug, Clone)]
 pub struct NetParseError {
@@ -113,33 +111,29 @@ impl IpOrNet {
     //   netmask - 1.1.1.0/255.255.255.0
     //   wildcard mask - 1.1.1.0/0.0.0.255
     fn parse_mask(p: &str) -> Result<u8, Box<dyn Error>> {
-        let mask = p.parse::<Ipv4Addr>();
-        match mask {
-            Ok(mask) => {
-                let intrep: u32 = mask.into();
-                let lead_ones = intrep.leading_ones();
-                if lead_ones > 0 {
-                    if lead_ones + intrep.trailing_zeros() == 32 {
-                        Ok(lead_ones.try_into()?)
-                    } else {
-                        Err(Box::new(NetParseError {
-                            msg: "Invalid subnet mask".to_owned(),
-                        }))
-                    }
-                } else {
-                    let lead_zeros = intrep.leading_zeros();
-                    if lead_zeros + intrep.trailing_ones() == 32 {
-                        Ok(lead_zeros.try_into()?)
-                    } else {
-                        Err(Box::new(NetParseError {
-                            msg: "Invalid wildcard mask".to_owned(),
-                        }))
-                    }
-                }
+        let mask = p.parse::<Ipv4Addr>()?;
+        let intrep: u32 = mask.into();
+        let lead_ones = intrep.leading_ones();
+        if lead_ones > 0 {
+            if lead_ones + intrep.trailing_zeros() == 32 {
+                Ok(lead_ones.try_into()?)
+            } else {
+                Err(Box::new(NetParseError {
+                    msg: "Invalid subnet mask".to_owned(),
+                }))
             }
-            Err(e) => Err(Box::new(e)),
+        } else {
+            let lead_zeros = intrep.leading_zeros();
+            if lead_zeros + intrep.trailing_ones() == 32 {
+                Ok(lead_zeros.try_into()?)
+            } else {
+                Err(Box::new(NetParseError {
+                    msg: "Invalid wildcard mask".to_owned(),
+                }))
+            }
         }
     }
+
     fn from_parts(ip: &str, pfxlen: &str) -> Result<Self, Box<dyn Error>> {
         let ip = ip.parse::<IpAddr>()?;
         let pfxlenp = pfxlen.parse::<u8>();
@@ -158,13 +152,25 @@ impl IpOrNet {
         }
     }
     pub fn prefix_len(&self) -> u8 {
-        self.net.prefix_len()
+        self.0.prefix_len()
     }
     pub fn is_ipv4(&self) -> bool {
-        self.net.network().is_ipv4()
+        match self.0 {
+            IpNet::V4(_) => true,
+            IpNet::V6(_) => false,
+        }
     }
     pub fn is_ipv6(&self) -> bool {
-        self.net.network().is_ipv6()
+        match self.0 {
+            IpNet::V4(_) => false,
+            IpNet::V6(_) => true,
+        }
+    }
+    pub fn addr(&self) -> IpAddr {
+        self.0.addr()
+    }
+    pub fn network(&self) -> IpAddr {
+        self.0.network()
     }
 }
 
@@ -181,47 +187,43 @@ impl FromStr for IpOrNet {
 
 impl Display for IpOrNet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.net.fmt(f)
+        self.0.fmt(f)
     }
 }
 
 impl From<IpNet> for IpOrNet {
     fn from(net: IpNet) -> Self {
-        IpOrNet { net }
+        IpOrNet(net)
     }
 }
 
 impl From<IpAddr> for IpOrNet {
     fn from(addr: IpAddr) -> Self {
-        IpOrNet { net: addr.into() }
+        IpOrNet(addr.into())
     }
 }
 
 impl From<Ipv4Net> for IpOrNet {
     fn from(net: Ipv4Net) -> Self {
-        IpOrNet { net: net.into() }
+        IpOrNet(net.into())
     }
 }
 
 impl From<Ipv6Net> for IpOrNet {
     fn from(net: Ipv6Net) -> Self {
-        IpOrNet { net: net.into() }
+        IpOrNet(net.into())
     }
 }
 
 impl From<Ipv4Addr> for IpOrNet {
     fn from(addr: Ipv4Addr) -> Self {
-        IpOrNet {
-            net: IpAddr::from(addr).into(),
-        }
+        IpOrNet(IpAddr::from(addr).into())
     }
 }
 
 impl From<Ipv6Addr> for IpOrNet {
     fn from(addr: Ipv6Addr) -> Self {
-        IpOrNet {
-            net: IpAddr::from(addr).into(),
-        }
+        IpOrNet(IpAddr::from(addr).into())
     }
 }
 
@@ -245,7 +247,7 @@ impl Display for PrefixlenPair {
 
 impl PartialEq<IpOrNet> for PrefixlenPair {
     fn eq(&self, other: &IpOrNet) -> bool {
-        match other.net {
+        match other.0 {
             IpNet::V4(net) => self.v4 == net.prefix_len(),
             IpNet::V6(net) => self.v6 == net.prefix_len(),
         }
@@ -260,31 +262,31 @@ impl PartialEq<PrefixlenPair> for PrefixlenPair {
 
 impl PartialOrd<IpOrNet> for PrefixlenPair {
     fn ge(&self, other: &IpOrNet) -> bool {
-        match other.net {
+        match other.0 {
             IpNet::V4(net) => self.v4 >= net.prefix_len(),
             IpNet::V6(net) => self.v6 >= net.prefix_len(),
         }
     }
     fn gt(&self, other: &IpOrNet) -> bool {
-        match other.net {
+        match other.0 {
             IpNet::V4(net) => self.v4 > net.prefix_len(),
             IpNet::V6(net) => self.v6 > net.prefix_len(),
         }
     }
     fn le(&self, other: &IpOrNet) -> bool {
-        match other.net {
+        match other.0 {
             IpNet::V4(net) => self.v4 <= net.prefix_len(),
             IpNet::V6(net) => self.v6 <= net.prefix_len(),
         }
     }
     fn lt(&self, other: &IpOrNet) -> bool {
-        match other.net {
+        match other.0 {
             IpNet::V4(net) => self.v4 < net.prefix_len(),
             IpNet::V6(net) => self.v6 < net.prefix_len(),
         }
     }
     fn partial_cmp(&self, other: &IpOrNet) -> Option<std::cmp::Ordering> {
-        match other.net {
+        match other.0 {
             IpNet::V4(net) => self.v4.partial_cmp(&net.prefix_len()),
             IpNet::V6(net) => self.v6.partial_cmp(&net.prefix_len()),
         }
