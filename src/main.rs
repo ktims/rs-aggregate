@@ -1,15 +1,17 @@
 extern crate ipnet;
 extern crate iprange;
 
-use std::process::exit;
+use std::{process::exit, io};
 
 mod iputils;
 use iputils::{IpBothRange, IpOrNet, PrefixlenPair};
 
 use clio::*;
-use std::io::BufRead;
+use std::io::{Write, BufRead};
 
 use clap::Parser;
+
+const WRITER_BUFSIZE: usize = 32 * 1024;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about=None)]
@@ -123,7 +125,11 @@ impl App {
 
         self.simplify_inputs();
 
-        print!("{}", self.prefixes);
+        let stdout = io::stdout().lock();
+        let mut w = io::BufWriter::with_capacity(WRITER_BUFSIZE, stdout);
+
+        write!(&mut w, "{}", self.prefixes).unwrap();
+        w.flush().unwrap();
     }
 }
 
