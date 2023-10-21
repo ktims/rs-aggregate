@@ -1,17 +1,18 @@
 use std::{
     error::Error,
     fmt::Display,
+    iter::Chain,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    slice::Iter,
     str::FromStr,
 };
 
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
-use iprange::{IpRange, IpRangeIter};
 
 #[derive(Default)]
 pub struct IpBothRange {
-    v4: IpRange<Ipv4Net>,
-    v6: IpRange<Ipv6Net>,
+    v4: Vec<IpNet>,
+    v6: Vec<IpNet>,
 }
 
 impl IpBothRange {
@@ -20,20 +21,20 @@ impl IpBothRange {
     }
     pub fn add(&mut self, net: IpOrNet) {
         match net.0 {
-            IpNet::V4(v4_net) => drop(self.v4.add(v4_net)),
-            IpNet::V6(v6_net) => drop(self.v6.add(v6_net)),
+            IpNet::V4(_) => self.v4.push(net.0),
+            IpNet::V6(_) => self.v6.push(net.0),
         }
     }
     pub fn simplify(&mut self) {
-        self.v4.simplify();
-        self.v6.simplify();
+        self.v4 = IpNet::aggregate(&self.v4);
+        self.v6 = IpNet::aggregate(&self.v6);
     }
 
-    pub fn v4_iter(&self) -> IpRangeIter<Ipv4Net> {
+    pub fn v4_iter<'a>(&self) -> Iter<'_, IpNet> {
         self.v4.iter()
     }
 
-    pub fn v6_iter(&self) -> IpRangeIter<Ipv6Net> {
+    pub fn v6_iter(&self) -> Iter<'_, IpNet> {
         self.v6.iter()
     }
 }
@@ -44,48 +45,15 @@ impl Display for IpBothRange {
             ip.fmt(f)?;
             writeln!(f)?;
         }
-
         Ok(())
     }
 }
 
-pub struct IpBothRangeIter<'a> {
-    v4_iter: IpRangeIter<'a, Ipv4Net>,
-    v6_iter: IpRangeIter<'a, Ipv6Net>,
-    _v4_done: bool,
-}
-
-impl<'a> Iterator for IpBothRangeIter<'a> {
-    type Item = IpNet;
-    fn next(&mut self) -> Option<Self::Item> {
-        if self._v4_done {
-            match self.v6_iter.next() {
-                Some(net) => return Some(net.into()),
-                None => return None,
-            }
-        }
-        match self.v4_iter.next() {
-            Some(net) => Some(net.into()),
-            None => {
-                self._v4_done = true;
-                match self.v6_iter.next() {
-                    Some(net) => Some(net.into()),
-                    None => None,
-                }
-            }
-        }
-    }
-}
-
 impl<'a> IntoIterator for &'a IpBothRange {
-    type Item = IpNet;
-    type IntoIter = IpBothRangeIter<'a>;
+    type Item = &'a IpNet;
+    type IntoIter = Chain<Iter<'a, IpNet>, Iter<'a, IpNet>>;
     fn into_iter(self) -> Self::IntoIter {
-        IpBothRangeIter {
-            v4_iter: self.v4.iter(),
-            v6_iter: self.v6.iter(),
-            _v4_done: false,
-        }
+        self.v4.iter().chain(self.v6.iter())
     }
 }
 

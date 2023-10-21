@@ -1,5 +1,4 @@
 extern crate ipnet;
-extern crate iprange;
 
 use std::{process::exit, io};
 
