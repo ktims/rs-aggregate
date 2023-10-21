@@ -1,8 +1,47 @@
 use assert_cmd::Command;
 use glob::glob;
-use predicates::prelude::*; // Used for writing assertions
+use predicates::prelude::*;
+use predicates::reflection::PredicateReflection;
+// Used for writing assertions
 use rstest::*;
-use std::{error::Error, fs::File, io::Read, path::Path};
+use std::fmt::Display;
+use std::{error::Error, fs::File, io::Read, path::Path, str};
+
+struct SortedEquals {
+    expect: Vec<u8>,
+}
+
+fn sort_buf(input: &[u8]) -> Vec<u8> {
+    let mut lines = input
+        .split(|x| *x == b'\n')
+        .map(|x| Vec::<u8>::from(x))
+        .collect::<Vec<Vec<u8>>>();
+    lines.sort();
+    lines.join(&b'\n')
+}
+
+impl SortedEquals {
+    fn new(expect: &[u8]) -> SortedEquals {
+        let sorted = sort_buf(expect);
+        SortedEquals { expect: sorted }
+    }
+}
+
+impl Display for SortedEquals {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(str::from_utf8(self.expect.as_slice()).unwrap())
+    }
+}
+
+impl Predicate<[u8]> for SortedEquals {
+    fn eval(&self, variable: &[u8]) -> bool {
+        // sort self into temporary, then compare with variable
+        let sorted = sort_buf(variable);
+        sorted == self.expect
+    }
+}
+
+impl PredicateReflection for SortedEquals {}
 
 // Really should normalize the data (lex sort) before comparison
 #[rstest]
@@ -28,7 +67,7 @@ fn dfz_test(#[case] path: &str, #[case] args: &str) -> Result<(), Box<dyn Error>
 
     assert
         .success()
-        .stdout(predicate::eq(expect_data))
+        .stdout(SortedEquals::new(&expect_data))
         .stderr(predicate::str::is_empty());
 
     Ok(())
@@ -79,7 +118,7 @@ fn multi_input_test(#[case] path: &str, #[case] args: &str) -> Result<(), Box<dy
 
     assert
         .success()
-        .stdout(predicate::eq(expect_data))
+        .stdout(SortedEquals::new(&expect_data))
         .stderr(predicate::str::is_empty());
 
     Ok(())
