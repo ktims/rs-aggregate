@@ -1,6 +1,6 @@
 [package]
 name = "rs-aggregate"
-version = "0.2.2"
+version = "0.3.0"
 authors = ["Keenan Tims <ktims@gotroot.ca>"]
 edition = "2021"
 description = "Aggregate a list of IP prefixes into their minimum equivalent representation"
@@ -15,8 +15,8 @@ exclude = [
 ]
 
 [dependencies]
-clap = { version = "4.1.8", features = ["derive"] }
-clio = { version = "0.2.7", features = ["clap-parse"] }
+clap = { version = "4.4.6", features = ["derive"] }
+clio = { version = "0.3.4", features = ["clap-parse"] }
 ipnet = "2.8.0"
 
 [dev-dependencies]
