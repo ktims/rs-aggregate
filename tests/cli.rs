@@ -43,14 +43,24 @@ impl Predicate<[u8]> for SortedEquals {
 
 impl PredicateReflection for SortedEquals {}
 
-// Really should normalize the data (lex sort) before comparison
+/// Compare the output with pre-prepared expected outputs. When functionality is
+/// matching, we generate expected outputs with `aggregate6`, and expect byte-for-byte
+/// output consistency, including ordering. When our functionality and `aggregate6`'s
+/// diverge, we generate expected outputs ourselves, and expect output sorted by numeric
+/// value of the address.
+///
+/// Normalization is available for future test cases.
 #[rstest]
-#[case("test-data/dfz_combined", "")] // Basic aggregation test
-#[case("test-data/max_pfxlen", "-m 20")] // Filter on prefix length
-#[case("test-data/max_pfxlen_split", "-m 20,32")] // Filter on prefix length (split v4/v6)
-#[case("test-data/v4_only", "-4")] // Filter v4 only
-#[case("test-data/v6_only", "-6")] // Filter v4 only
-fn dfz_test(#[case] path: &str, #[case] args: &str) -> Result<(), Box<dyn Error>> {
+#[case::dfz_combined("test-data/dfz_combined", "", false)] // Basic aggregation test
+#[case::max_pfxlen("test-data/max_pfxlen", "-m 20", false)] // Filter on prefix length
+#[case::max_pfxlen_split("test-data/max_pfxlen_split", "-m 20,32", false)] // Filter on prefix length (split v4/v6)
+#[case::v4_only("test-data/v4_only", "-4", false)] // Filter v4 only
+#[case::v6_only("test-data/v6_only", "-6", false)] // Filter v6 only
+fn dfz_test(
+    #[case] path: &str,
+    #[case] args: &str,
+    #[case] normalize_data: bool,
+) -> Result<(), Box<dyn Error>> {
     let mut cmd = Command::cargo_bin("rs-aggregate")?;
     let in_path = Path::new(path).join("input");
     let expect_path = Path::new(path).join("expected");
@@ -65,10 +75,17 @@ fn dfz_test(#[case] path: &str, #[case] args: &str) -> Result<(), Box<dyn Error>
         .timeout(std::time::Duration::from_secs(30))
         .assert();
 
-    assert
-        .success()
-        .stdout(SortedEquals::new(&expect_data))
-        .stderr(predicate::str::is_empty());
+    if normalize_data {
+        assert
+            .success()
+            .stdout(SortedEquals::new(&expect_data))
+            .stderr(predicate::str::is_empty());
+    } else {
+        assert
+            .success()
+            .stdout(predicate::eq(expect_data))
+            .stderr(predicate::str::is_empty());
+    }
 
     Ok(())
 }
