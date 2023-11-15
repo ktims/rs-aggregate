@@ -22,3 +22,17 @@ Full DFZ (1154968 total, 202729 aggregates):
 
 IPv4 DFZ (968520 total, 154061 aggregates):
 ![ipv4 dfz perf comparison](doc/perfcomp_v4.png)
+
+## Installation
+
+### FreeBSD
+
+```
+pkg install rs-aggregate
+```
+
+### Others
+
+```
+cargo install rs-aggregate
+```
