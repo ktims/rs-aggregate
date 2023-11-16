@@ -6,6 +6,7 @@ use plotters::drawing::IntoDrawingArea;
 use plotters::element::{Circle, EmptyElement, Text};
 use plotters::series::{Histogram, PointSeries};
 use plotters::style::full_palette::{BLUEGREY, GREY};
+use plotters::style::text_anchor::{HPos, Pos, VPos};
 use plotters::style::{Color, IntoFont, RGBAColor, RGBColor, ShapeStyle, BLACK, WHITE};
 use std::ffi::OsStr;
 use std::io::Read;
@@ -74,8 +75,7 @@ fn make_tests(input_path: &str) -> Vec<TestDefinition> {
             name: our_version.into(),
         },
         TestDefinition {
-            cmd: format!("aggregate6 {}", input_path),
-            // cmd: "sleep 0.25".into(),
+            cmd: format!("python3 -m aggregate6 {}", input_path),
             name: format!("{} ({})", agg6_version.trim(), python_version.trim()),
         },
     ]
@@ -112,13 +112,13 @@ where
         .arg("--export-json")
         .arg(resultfile.path())
         .arg("--min-runs")
-        .arg("2")
+        .arg("10")
         .arg("--")
-        .arg(cmd)
+        .arg(&cmd)
         .stdout(Stdio::null())
         .spawn()
         .expect("unable to run command");
-    let rc = process.wait().expect("unable to wait on process");
+    let _rc = process.wait().expect("unable to wait on process");
 
     let mut raw_result_buf = Vec::new();
     resultfile
@@ -127,8 +127,13 @@ where
         .expect("Can't read results");
     resultfile.close().unwrap();
 
-    let hf_result = json::parse(&String::from_utf8_lossy(&raw_result_buf))
-        .expect("Can't parse hyperfine json results");
+    let hf_result = json::parse(&String::from_utf8_lossy(&raw_result_buf)).expect(
+        format!(
+            "Can't parse hyperfine json results from command `{}`",
+            cmd.as_ref().to_string_lossy()
+        )
+        .as_str(),
+    );
 
     let final_result = &hf_result["results"][0];
 
@@ -188,11 +193,19 @@ fn plot_results(
         5,
         ShapeStyle::from(&BLACK).filled(),
         &|coord, size, style| {
+            let (target_y, target_colour) = if coord.1 < 25.0 {
+                (-25, BAR_COLOUR)
+            } else {
+                (25, WHITE)
+            };
             EmptyElement::at(coord.clone())
                 + Text::new(
                     format!("{:.1} x", coord.1),
-                    (0, 10),
-                    ("Roboto", 18).into_font().color(&WHITE),
+                    (0, target_y),
+                    ("Roboto", 18)
+                        .into_font()
+                        .color(&target_colour)
+                        .pos(Pos::new(HPos::Center, VPos::Center)),
                 )
         },
     ))?;
