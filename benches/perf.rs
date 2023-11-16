@@ -1,17 +1,17 @@
 use json::JsonValue;
 use plotters::backend::BitMapBackend;
 use plotters::chart::ChartBuilder;
-use plotters::coord::ranged1d::{IntoSegmentedCoord, SegmentValue, SegmentedCoord};
+use plotters::coord::ranged1d::{IntoSegmentedCoord, SegmentValue};
 use plotters::drawing::IntoDrawingArea;
-use plotters::element::{Circle, EmptyElement, Text};
+use plotters::element::{EmptyElement, Text};
 use plotters::series::{Histogram, PointSeries};
-use plotters::style::full_palette::{BLUEGREY, GREY};
+use plotters::style::full_palette::GREY;
 use plotters::style::text_anchor::{HPos, Pos, VPos};
-use plotters::style::{Color, IntoFont, RGBAColor, RGBColor, ShapeStyle, BLACK, WHITE};
+use plotters::style::{Color, IntoFont, RGBColor, ShapeStyle, BLACK, WHITE};
 use std::ffi::OsStr;
 use std::io::Read;
-use std::path::Path;
-use std::process::{Command, Stdio};
+
+use std::process::Stdio;
 use tempfile::NamedTempFile;
 
 const BAR_COLOUR: RGBColor = RGBColor(66, 133, 244);
@@ -192,7 +192,7 @@ fn plot_results(
             .map(|(x, y)| (SegmentValue::CenterOf(x), norm_numerator / y.1.mean)),
         5,
         ShapeStyle::from(&BLACK).filled(),
-        &|coord, size, style| {
+        &|coord, _size, _style| {
             let (target_y, target_colour) = if coord.1 < 25.0 {
                 (-25, BAR_COLOUR)
             } else {
