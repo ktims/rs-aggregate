@@ -140,6 +140,9 @@ impl IpOrNet {
     pub fn network(&self) -> IpAddr {
         self.0.network()
     }
+    pub fn has_host_bits(&self) -> bool {
+        self.0.addr() != self.0.network()
+    }
 }
 
 impl FromStr for IpOrNet {

@@ -60,16 +60,17 @@ struct App {
 }
 
 impl App {
-    fn add_prefix(&mut self, pfx: IpOrNet) {
+    fn add_prefix<const TRUNCATE: bool>(&mut self, pfx: IpOrNet) {
         // Parser accepts host bits set, so detect that case and error if not truncate mode
         // Note: aggregate6 errors in this case regardless of -4, -6 so do the same
-        if !self.args.truncate {
-            if pfx.addr() != pfx.network() {
-                eprintln!("ERROR: '{}' is not a valid IP network, ignoring.", pfx);
-                return;
-            }
+        if !TRUNCATE && pfx.has_host_bits() {
+            // We don't have the original string any more so our error
+            // differs from `aggregate6` in that it prints the pfxlen as
+            // parsed, not as in the source.
+            eprintln!("ERROR: '{}' is not a valid IP network, ignoring.", pfx);
+            return;
         }
-        // Don't bother saving if we won't display.
+
         if self.args.only_v4 && pfx.is_ipv6() {
             return;
         } else if self.args.only_v6 && pfx.is_ipv4() {
@@ -79,14 +80,14 @@ impl App {
             self.prefixes.add(pfx);
         }
     }
-    fn consume_input(&mut self, input: &mut Input) {
+    fn consume_input<const TRUNCATE: bool>(&mut self, input: &mut Input) {
         for line in input.lock().lines() {
             match line {
                 Ok(line) => {
-                    for net in line.split_whitespace() {
+                    for net in line.split_ascii_whitespace() {
                         let pnet = net.parse::<IpOrNet>();
                         match pnet {
-                            Ok(pnet) => self.add_prefix(pnet),
+                            Ok(pnet) => self.add_prefix::<TRUNCATE>(pnet),
                             Err(_e) => {
                                 eprintln!("ERROR: '{}' is not a valid IP network, ignoring.", net);
                             }
@@ -103,7 +104,10 @@ impl App {
     fn simplify_inputs(&mut self) {
         let inputs = self.args.input.to_owned();
         for mut input in inputs {
-            self.consume_input(&mut input);
+            match self.args.truncate {
+                true => self.consume_input::<true>(&mut input),
+                false => self.consume_input::<false>(&mut input),
+            }
         }
         self.prefixes.simplify();
     }
