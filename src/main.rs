@@ -1,44 +1,33 @@
 extern crate ipnet;
 
-use std::{process::exit, io};
+use std::{io, process::exit};
 
 mod iputils;
 use iputils::{IpBothRange, IpOrNet, PrefixlenPair};
 
 use clio::*;
-use std::io::{Write, BufRead};
+use std::io::{BufRead, Write};
 
 use clap::Parser;
 
-const WRITER_BUFSIZE: usize = 32 * 1024;
+const WRITER_BUFSIZE: usize = 1 * 1024;
 
 #[derive(Parser)]
-#[command(author, version, about, long_about=None)]
+#[command(author, version, about)]
 struct Args {
     #[clap(value_parser, default_value = "-")]
     input: Vec<Input>,
-    #[structopt(
-        short,
-        long,
-        default_value = "32,128",
-        help = "Maximum prefix length for prefixes read. Single value applies to IPv4 and IPv6, comma-separated [IPv4],[IPv6]."
-    )]
+    /// Maximum prefix length for prefixes read. Single value applies to IPv4 and IPv6, comma-separated [IPv4],[IPv6].
+    #[structopt(short, long, default_value = "32,128")]
     max_prefixlen: PrefixlenPair,
-    #[arg(short, long, help = "truncate IP/mask to network/mask (else ignore)")]
+    /// Truncate IP/mask to network/mask (else ignore)
+    #[arg(short, long)]
     truncate: bool,
-    #[arg(
-        id = "4",
-        short,
-        help = "Only output IPv4 prefixes",
-        conflicts_with("6")
-    )]
+    /// Only output IPv4 prefixes
+    #[arg(id = "4", short, conflicts_with("6"))]
     only_v4: bool,
-    #[arg(
-        id = "6",
-        short,
-        help = "Only output IPv6 prefixes",
-        conflicts_with("4")
-    )]
+    /// Only output IPv6 prefixes
+    #[arg(id = "6", short, conflicts_with("4"))]
     only_v6: bool,
 }
 
