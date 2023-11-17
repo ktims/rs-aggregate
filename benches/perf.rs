@@ -1,3 +1,4 @@
+use ipnet::Ipv4Net;
 use json::JsonValue;
 use plotters::backend::BitMapBackend;
 use plotters::chart::ChartBuilder;
@@ -8,8 +9,10 @@ use plotters::series::{Histogram, PointSeries};
 use plotters::style::full_palette::GREY;
 use plotters::style::text_anchor::{HPos, Pos, VPos};
 use plotters::style::{Color, IntoFont, RGBColor, ShapeStyle, BLACK, WHITE};
+use rand::prelude::*;
+use rand_chacha::ChaChaRng;
 use std::ffi::OsStr;
-use std::io::Read;
+use std::io::{Read, Write};
 
 use std::process::Stdio;
 use tempfile::NamedTempFile;
@@ -102,6 +105,33 @@ fn make_v4_tests(input_path: &str) -> Vec<TestDefinition> {
     all_tests
 }
 
+// We don't really care if aggregation will actually be possible, but we'll only
+// generate prefixes with length 8->24 so some should be possible.
+fn make_random_prefix(rng: &mut impl Rng) -> Ipv4Net {
+    let prefix_len: u8 = rng.gen_range(8..25);
+    let netaddr: u32 = rng.gen_range(0..(1 << prefix_len)) << 32 - prefix_len;
+
+    Ipv4Net::new(netaddr.into(), prefix_len).unwrap()
+}
+
+// Generate 1024 random v4 addresses as a startup time test
+fn make_startup_tests() -> (NamedTempFile, Vec<TestDefinition>) {
+    let mut rng = ChaChaRng::seed_from_u64(0); // use a repeatable rng with custom seed
+    let addresses = std::iter::repeat_with(|| make_random_prefix(&mut rng)).take(1024);
+
+    let mut outfile = NamedTempFile::new().unwrap();
+    let mut outfile_f = outfile.as_file();
+    for addr in addresses {
+        outfile_f.write_fmt(format_args!("{}\n", addr)).unwrap();
+    }
+    outfile.flush().unwrap();
+
+    let outpath = outfile.path().as_os_str().to_string_lossy().to_string();
+
+    // outfile needs to live on so destructor doesn't delete it before we run the benches
+    (outfile, make_v4_tests(outpath.as_str()))
+}
+
 fn hyperfine_harness<S>(cmd: S) -> Result<TestResult, Box<dyn std::error::Error>>
 where
     S: AsRef<OsStr>,
@@ -113,6 +143,7 @@ where
         .arg(resultfile.path())
         .arg("--min-runs")
         .arg("10")
+        .arg("-N")
         .arg("--")
         .arg(&cmd)
         .stdout(Stdio::null())
@@ -214,21 +245,38 @@ fn plot_results(
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut results: Vec<(TestDefinition, TestResult)> = Vec::new();
-    for test in make_tests("test-data/dfz_combined/input") {
-        results.push((test.clone(), hyperfine_harness(&test.cmd)?));
-    }
-    plot_results(
-        &results,
-        "IPv4 & IPv6 Full DFZ Prefixes",
+    run_and_plot(
+        make_tests("test-data/dfz_combined/input"),
         "doc/perfcomp_all.png",
+        "IPv4 & IPv6 Full DFZ",
+    )?;
+    run_and_plot(
+        make_v4_tests("test-data/dfz_v4/input"),
+        "doc/perfcomp_v4.png",
+        "IPv4 Full DFZ",
     )?;
 
-    let mut results = Vec::new();
-    for test in make_v4_tests("test-data/dfz_v4/input") {
+    // Need to hold on to tmpfile so it doesn't get deleted before we can bench
+    let (_tmpfile, tests) = make_startup_tests();
+    run_and_plot(
+        tests,
+        "doc/perfcomp_startup.png",
+        "1024 Random IPv4 Prefixes",
+    )?;
+
+    Ok(())
+}
+
+fn run_and_plot(
+    tests: Vec<TestDefinition>,
+    filename: &str,
+    caption: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut results: Vec<(TestDefinition, TestResult)> = Vec::new();
+    for test in tests {
+        println!("Running bench: {:?}", test);
         results.push((test.clone(), hyperfine_harness(&test.cmd)?));
     }
-    plot_results(&results, "IPv4 Full DFZ Prefixes", "doc/perfcomp_v4.png")?;
-
+    plot_results(&results, caption, filename)?;
     Ok(())
 }
