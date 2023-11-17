@@ -1,6 +1,6 @@
 [package]
 name = "rs-aggregate"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Keenan Tims <ktims@gotroot.ca>"]
 edition = "2021"
 description = "Aggregate a list of IP prefixes into their minimum equivalent representation"
@@ -8,11 +8,7 @@ readme = "README.md"
 repository = "https://github.com/ktims/rs-aggregate"
 license = "MIT"
 categories = ["network-programming"]
-exclude = [
-	".github/*",
-	"doc/*",
-	"test-data/*",
-]
+exclude = [".github/*", "doc/*", "test-data/*"]
 
 [dependencies]
 clap = { version = "4.4.6", features = ["derive"] }
