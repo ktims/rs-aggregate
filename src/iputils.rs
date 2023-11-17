@@ -63,7 +63,7 @@ pub struct IpOrNet(IpNet);
 #[derive(Debug, Clone)]
 pub struct NetParseError {
     #[allow(dead_code)]
-    msg: String,
+    msg: &'static str,
 }
 
 impl Display for NetParseError {
@@ -87,7 +87,7 @@ impl IpOrNet {
                 Ok(lead_ones.try_into()?)
             } else {
                 Err(Box::new(NetParseError {
-                    msg: "Invalid subnet mask".to_owned(),
+                    msg: "Invalid subnet mask",
                 }))
             }
         } else {
@@ -96,7 +96,7 @@ impl IpOrNet {
                 Ok(lead_zeros.try_into()?)
             } else {
                 Err(Box::new(NetParseError {
-                    msg: "Invalid wildcard mask".to_owned(),
+                    msg: "Invalid wildcard mask",
                 }))
             }
         }
@@ -113,7 +113,7 @@ impl IpOrNet {
                     Ok(IpNet::new(ip, IpOrNet::parse_mask(pfxlen)?)?.into())
                 } else {
                     Err(Box::new(NetParseError {
-                        msg: "Mask form is not valid for IPv6 address".to_owned(),
+                        msg: "Mask form is not valid for IPv6 address",
                     }))
                 }
             }
@@ -209,7 +209,7 @@ impl Default for PrefixlenPair {
 
 impl Display for PrefixlenPair {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(format!("{},{}", self.v4, self.v6).as_str())
+        f.write_fmt(format_args!("{},{}", self.v4, self.v6))
     }
 }
 
@@ -263,12 +263,12 @@ impl PartialOrd<IpOrNet> for PrefixlenPair {
 
 #[derive(Debug)]
 pub struct ParsePrefixlenError {
-    msg: String,
+    msg: &'static str,
 }
 
 impl Display for ParsePrefixlenError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.msg.as_str())
+        f.write_str(self.msg)
     }
 }
 
@@ -280,25 +280,25 @@ impl FromStr for PrefixlenPair {
         match s.split_once(',') {
             Some(pair) => {
                 let v4 = u8::from_str(pair.0).or(Err(ParsePrefixlenError {
-                    msg: "Unable to parse integer".to_owned(),
+                    msg: "Unable to parse integer",
                 }))?;
                 let v6 = u8::from_str(pair.1).or(Err(ParsePrefixlenError {
-                    msg: "Unable to parse integer".to_owned(),
+                    msg: "Unable to parse integer",
                 }))?;
                 if v4 > 32 || v6 > 128 {
                     return Err(ParsePrefixlenError {
-                        msg: "Invalid prefix length".to_owned(),
+                        msg: "Invalid prefix length",
                     });
                 }
                 Ok(PrefixlenPair { v4, v6 })
             }
             None => {
                 let len = u8::from_str(s).or(Err(ParsePrefixlenError {
-                    msg: "Unable to parse integer".to_owned(),
+                    msg: "Unable to parse integer",
                 }))?;
                 if len > 128 {
                     return Err(ParsePrefixlenError {
-                        msg: "Invalid prefix length".to_owned(),
+                        msg: "Invalid prefix length",
                     });
                 }
                 Ok(PrefixlenPair { v4: len, v6: len })
