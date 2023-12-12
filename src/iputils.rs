@@ -1,3 +1,4 @@
+use rayon::join;
 use std::{
     error::Error,
     fmt::Display,
@@ -24,8 +25,10 @@ impl IpBothRange {
         }
     }
     pub fn simplify(&mut self) {
-        self.v4 = Ipv4Net::aggregate(&self.v4);
-        self.v6 = Ipv6Net::aggregate(&self.v6);
+        (self.v4, self.v6) = join(
+            || Ipv4Net::aggregate(&self.v4),
+            || Ipv6Net::aggregate(&self.v6),
+        );
     }
 
     pub fn v4_iter(&self) -> impl Iterator<Item = &Ipv4Net> {
