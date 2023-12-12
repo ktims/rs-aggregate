@@ -10,7 +10,7 @@ use std::io::{BufRead, Write};
 
 use clap::Parser;
 
-const WRITER_BUFSIZE: usize = 1 * 1024;
+const WRITER_BUFSIZE: usize = 16 * 1024;
 
 #[derive(Parser)]
 #[command(author, version, about)]
@@ -73,7 +73,8 @@ impl App {
 
         if self.args.only_v4 && pfx.is_ipv6() {
             return;
-        } else if self.args.only_v6 && pfx.is_ipv4() {
+        }
+        if self.args.only_v6 && pfx.is_ipv4() {
             return;
         }
         if self.args.max_prefixlen >= pfx {
