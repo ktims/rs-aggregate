@@ -1,3 +1,4 @@
+#[cfg(feature = "rayon")]
 use rayon::join;
 use std::{
     error::Error,
@@ -24,11 +25,17 @@ impl IpBothRange {
             IpNet::V6(n) => self.v6.push(n),
         }
     }
+    #[cfg(feature = "rayon")]
     pub fn simplify(&mut self) {
         (self.v4, self.v6) = join(
             || Ipv4Net::aggregate(&self.v4),
             || Ipv6Net::aggregate(&self.v6),
         );
+    }
+    #[cfg(not(feature = "rayon"))]
+    pub fn simplify(&mut self) {
+        self.v4 = Ipv4Net::aggregate(&self.v4);
+        self.v6 = Ipv6Net::aggregate(&self.v6);
     }
 
     pub fn v4_iter(&self) -> impl Iterator<Item = &Ipv4Net> {
